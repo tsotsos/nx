@@ -27,38 +27,48 @@ type SystemStatus struct {
 	Message        string `xml:"sysflt"`
 }
 
+var sessionId string
+
 func init() {
+	sessionId = ""
 	if err := godotenv.Load(); err != nil {
 		fmt.Println(err)
 	}
 }
+
 func main() {
-	Conf := NewConfig()
-	//session, err := LoginRq()
-	//session, err := Login("", "")
-	//	if err != nil {
-	//		fmt.Println(err)
-	//	}
-	//	st, _ := Status("CC653D4AAAA947FF")
-	//	if err != nil {
-	//		panic(err)
-	//	}
-	fmt.Println("")
+	conf := NewConfig()
+	fmt.Println(conf)
+	st, err := Status(conf)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(st)
 }
 
 // Status fetches System Statusfrom HTTP server and handles reconnection
 // in case session has been expired
-//func Status() (error, SystemStatus) {
-//}
+func Status(conf *Config) (SystemStatus, error) {
+	status := SystemStatus{}
+	// we try current setted session
+	status, err := getStatus(conf)
+	if err.Error() == "Forbidden" {
+		sessionId, err = login(conf)
+		if err != nil {
+			return status, err
+		}
+		status, err = getStatus(conf)
+	}
+	return status, err
+}
 
-func doRequest(call string, method string, params string) ([]byte, error) {
+func doRequest(url string, method string, params string) ([]byte, error) {
 
 	var result []byte
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	url := Conf.Protocol + "://" + Conf.Ip + "/" + call
 
 	//if method == "POST" {
 	body := strings.NewReader(params)
@@ -82,13 +92,14 @@ func doRequest(call string, method string, params string) ([]byte, error) {
 	return bodyBytes, err
 }
 
-func login(user string, password string) (string, error) {
+func login(conf *Config) (string, error) {
 	var result string
 	var session string
 	re := regexp.MustCompile(
 		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
-	params := "lgname=" + user + "&lgpin=" + password
-	response, err := doRequest("login.cgi", "POST", params)
+	params := "lgname=" + conf.User + "&lgpin=" + conf.Pin
+	url := conf.Url + "login.cgi"
+	response, err := doRequest(url, "POST", params)
 
 	if err != nil {
 		return result, err
@@ -102,9 +113,10 @@ func login(user string, password string) (string, error) {
 	return session, err
 }
 
-func getStatus(session string) (SystemStatus, error) {
-	params := "sess=" + session + "&arsel=0"
-	response, err := doRequest("user/status.xml", "POST", params)
+func getStatus(conf *Config) (SystemStatus, error) {
+	params := "sess=" + sessionId + "&arsel=0"
+	url := conf.Url + "user/status.xml"
+	response, err := doRequest(url, "POST", params)
 	result := SystemStatus{}
 	if err != nil {
 		return result, err

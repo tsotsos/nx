@@ -10,6 +10,7 @@ type Config struct {
 	Name     string
 	User     string
 	Pin      string
+	Url      string
 }
 
 // New Config struct
@@ -20,6 +21,7 @@ func NewConfig() *Config {
 		Name:     getEnv("NX_NANE", ""),
 		User:     getEnv("NX_USER", ""),
 		Pin:      getEnv("NX_PIN", ""),
+		Url:      getEnv("NX_PROTOCOL", "") + "://" + getEnv("NX_HOST", "") + "/",
 	}
 }
 
