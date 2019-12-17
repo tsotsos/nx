@@ -1,0 +1,287 @@
+package main
+
+import (
+	"crypto/tls"
+	"encoding/xml"
+	"errors"
+	"fmt"
+	"io/ioutil"
+	"math"
+	"net/http"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+)
+
+type Config struct {
+	Protocol string
+	Host     string
+	Name     string
+	User     string
+	Pin      string
+	Url      string
+	Session  string //session id
+}
+
+type SystemStatus struct {
+	Abank          int    `xml:"abank"`
+	Seq            int    `xml:"aseq"`
+	Away           bool   `xml:"stat0"`
+	Stay           bool   `xml:"stat1"`
+	Ready          bool   `xml:"stat2"`
+	FireAlarm      bool   `xml:"stat3"`
+	IntrusionAlarm bool   `xml:"stat4"`
+	ExitDelay      bool   `xml:"stat7"`
+	EntryDelay     bool   `xml:"stat9"`
+	BypassOn       bool   `xml:"stat10"`
+	ChimeOn        bool   `xml:"stat15"`
+	Message        string `xml:"sysflt"`
+}
+
+type sequenceReq struct {
+	Areas int    `xml:"areas"`
+	Zones string `xml:"zones"`
+}
+
+type zstateReq struct {
+	Zstate int    `xml:"zstate"`
+	Zseq   int    `xml:"zseq"`
+	ZdatS  string `xml:"zdat"`
+	Zdat   [4]int
+}
+
+var sessionId string
+
+// Sets session to global and file
+func setSession(session string) {
+	sessionId = session
+	file, err := os.Create("session")
+	if err != nil {
+		panic(err)
+		return
+	}
+	defer file.Close()
+	file.WriteString(session)
+}
+
+// Retrieves the session from global or file
+func getSession() string {
+	if sessionId != "" {
+		return sessionId
+	}
+	content, err := ioutil.ReadFile("session")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ""
+		}
+		panic(err)
+	}
+	session := string(content)
+	sessionId = session
+	return session
+}
+
+func ZonesStatuses(conf *Config) (string, error) {
+	var rawSequence sequenceReq
+	rawSequence, err := Sequence(conf)
+	zones := strings.Split(rawSequence.Zones, ",")
+	//FIXME: should change to map to ensure correct zstate name
+	zonesData := make([][4]int, len(zones))
+	for i, _ := range zones {
+		//		n, _ := strconv.Atoi(zones[i])
+		//		if n != zonesData[i] {
+		zstate, _ := Zstate(conf, i)
+		//if err != nil {
+		//	panic(err)
+		//}
+		zonesData[zstate.Zstate] = zstate.Zdat
+		//spew.Dump(zstate)
+		//		}
+	}
+	zonesZStatus(zonesData)
+	return "", err
+}
+
+func Sequence(conf *Config) (sequenceReq, error) {
+	// we try current setted session
+	result := sequenceReq{}
+	result, err := getSequence(conf)
+	if err != nil && err.Error() == "Forbidden" {
+		_, err := login(conf)
+		if err != nil {
+			return result, err
+		}
+		result, err = getSequence(conf)
+	}
+	return result, err
+}
+func Zstate(conf *Config, state int) (zstateReq, error) {
+	// we try current setted session
+	result := zstateReq{}
+	result, err := getZstate(conf, state)
+	if err != nil && err.Error() == "Forbidden" {
+		_, err := login(conf)
+		if err != nil {
+			return result, err
+		}
+		result, err = getZstate(conf, state)
+	}
+	return result, err
+}
+
+// Status fetches System Statusfrom HTTP server and handles reconnection
+// in case session has been expired
+func Status(conf *Config) (SystemStatus, error) {
+	status := SystemStatus{}
+	// we try current setted session
+	status, err := getStatus(conf)
+	if err != nil && err.Error() == "Forbidden" {
+		_, err := login(conf)
+		if err != nil {
+			return status, err
+		}
+		status, err = getStatus(conf)
+	}
+	return status, err
+}
+func loginFormExist(response []byte) bool {
+	loginForm := ""
+	var re = regexp.MustCompile(`(?m)form method="post" action="/login.cgi"`)
+	for _, match := range re.FindAllStringSubmatch(string(response), -1) {
+		if match[0] != "" {
+			loginForm = match[0]
+		}
+	}
+	if loginForm != "" {
+		return true
+	}
+	return false
+}
+
+// HTTP request wrapper
+func doRequest(url string, method string, params string) ([]byte, error) {
+
+	var result []byte
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
+
+	//if method == "POST" {
+	body := strings.NewReader(params)
+	request, err := http.NewRequest(method, url, body)
+	//}
+	if err != nil {
+		return result, err
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return result, err
+	}
+	if response.StatusCode == http.StatusForbidden {
+		return result, errors.New("Forbidden")
+	}
+	if response.StatusCode != http.StatusOK {
+		return result, errors.New("Could not connect to card")
+	}
+	bodyBytes, err := ioutil.ReadAll(response.Body)
+	if loginFormExist(bodyBytes) == true {
+		return result, errors.New("Forbidden")
+	}
+	defer response.Body.Close()
+	return bodyBytes, err
+}
+
+// Login to system this function returns session id and also save it to a file
+// and global
+func login(conf *Config) (string, error) {
+	var result string
+	var session string
+	re := regexp.MustCompile(
+		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
+	params := "lgname=" + conf.User + "&lgpin=" + conf.Pin
+	url := conf.Url + "login.cgi"
+	response, err := doRequest(url, "POST", params)
+
+	if err != nil {
+		return result, err
+	}
+	bodyString := string(response)
+	for _, match := range re.FindAllStringSubmatch(bodyString, -1) {
+		if match[1] != "" {
+			session = match[1]
+		}
+	}
+	setSession(session)
+	return session, err
+}
+
+// Handles the status request and response parsing
+func getStatus(conf *Config) (SystemStatus, error) {
+	params := "sess=" + getSession() + "&arsel=7"
+	url := conf.Url + "user/status.xml"
+	response, err := doRequest(url, "POST", params)
+	fmt.Println(string(response))
+	result := SystemStatus{}
+	if err != nil {
+		return result, err
+	}
+	xml.Unmarshal(response, &result)
+	return result, err
+}
+
+// Handles Sequence request
+func getSequence(conf *Config) (sequenceReq, error) {
+	params := "sess=" + getSession()
+	url := conf.Url + "user/seq.xml"
+	response, err := doRequest(url, "POST", params)
+	result := sequenceReq{}
+	if err != nil {
+		return result, err
+	}
+	xml.Unmarshal(response, &result)
+	return result, err
+}
+func zonesZStatus(zones [][4]int) {
+	for i, _ := range zones {
+		zoneZStatus(i, zones)
+	}
+}
+func zoneZStatus(i int, zones [][4]int) {
+	mask := 0x01 << (uint(i) % 16)
+	byteIndex := int(math.Floor(float64(i) / 16))
+
+	// on alarm
+	if zones[5][byteIndex]&mask != 0 {
+		fmt.Println("Zone " + strconv.Itoa(i) + "is on alarm")
+	}
+	// ByPass
+	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
+		fmt.Println("Zone " + strconv.Itoa(i) + " is not ByPassed")
+	}
+	// Not Ready
+	if zones[0][byteIndex]&mask != 0 {
+		fmt.Println("Zone " + strconv.Itoa(i) + " is not READY")
+	}
+
+}
+
+// Handles Zstate request
+func getZstate(conf *Config, state int) (zstateReq, error) {
+	url := conf.Url + "user/zstate.xml"
+	result := zstateReq{}
+	params := "sess=" + getSession() + "&state=" + strconv.Itoa(state)
+	response, err := doRequest(url, "POST", params)
+	xml.Unmarshal(response, &result)
+	if result.ZdatS != "" {
+		stAr := strings.Split(result.ZdatS, ",")
+		for i, v := range stAr {
+			result.Zdat[i], err = strconv.Atoi(v)
+			if err != nil {
+				return result, err
+			}
+		}
+	}
+	return result, err
+}
