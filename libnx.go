@@ -24,6 +24,14 @@ type Config struct {
 	Session  string //session id
 }
 
+const (
+	Ready = iota
+	NotReady
+	ByPass
+	SysCondition
+	InAlarm
+)
+
 type SystemStatus struct {
 	Abank          int    `xml:"abank"`
 	Seq            int    `xml:"aseq"`
@@ -86,7 +94,6 @@ func ZonesStatuses(conf *Config) (string, error) {
 	var rawSequence sequenceReq
 	rawSequence, err := Sequence(conf)
 	zones := strings.Split(rawSequence.Zones, ",")
-	//FIXME: should change to map to ensure correct zstate name
 	zonesData := make([][4]int, len(zones))
 	for i, _ := range zones {
 		//		n, _ := strconv.Atoi(zones[i])
@@ -99,10 +106,13 @@ func ZonesStatuses(conf *Config) (string, error) {
 		//spew.Dump(zstate)
 		//		}
 	}
-	zonesZStatus(zonesData)
+	fmt.Println(zonesZStatus(zonesData))
 	return "", err
 }
 
+// Returns Sequence. Via this request we can retrieve seq.xml response but still
+// in order to retrieve Statuses you should use ZoneStatuses function, since
+// sequence cannot be used without Zstate.
 func Sequence(conf *Config) (sequenceReq, error) {
 	// we try current setted session
 	result := sequenceReq{}
@@ -116,6 +126,10 @@ func Sequence(conf *Config) (sequenceReq, error) {
 	}
 	return result, err
 }
+
+// Returns Zstate result. Zstate cannot be used without Sequence, only by
+// joining Zstate and Sequese requests we can calculate zone statues
+// for this use ZoneStatuses()
 func Zstate(conf *Config, state int) (zstateReq, error) {
 	// we try current setted session
 	result := zstateReq{}
@@ -145,6 +159,10 @@ func Status(conf *Config) (SystemStatus, error) {
 	}
 	return status, err
 }
+
+// Handles the case of login form prompt. In case of session expiration in some
+// occasions NX redirects to login page (even on XHRs), this function dectects
+// login form and returns its status
 func loginFormExist(response []byte) bool {
 	loginForm := ""
 	var re = regexp.MustCompile(`(?m)form method="post" action="/login.cgi"`)
@@ -157,6 +175,41 @@ func loginFormExist(response []byte) bool {
 		return true
 	}
 	return false
+}
+
+// Creates an array of statuses for zones
+func zonesZStatus(zones [][4]int) []int {
+	result := make([]int, len(zones))
+	for i, _ := range zones {
+		result[i] = zoneZStatus(i, zones)
+	}
+	return result
+}
+
+// Calculates status for a zone
+func zoneZStatus(i int, zones [][4]int) int {
+	mask := 0x01 << (uint(i) % 16)
+	byteIndex := int(math.Floor(float64(i) / 16))
+
+	// In alarm
+	if zones[5][byteIndex]&mask != 0 {
+		return InAlarm
+	}
+	// System condition
+	if zones[1][byteIndex]&mask != 0 || zones[2][byteIndex]&mask != 0 ||
+		zones[6][byteIndex]&mask != 0 || zones[7][byteIndex]&mask != 0 {
+		return SysCondition
+	}
+	// ByPass
+	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
+		return ByPass
+	}
+	// Not Ready
+	if zones[0][byteIndex]&mask != 0 {
+		return NotReady
+	}
+	return Ready
+
 }
 
 // HTTP request wrapper
@@ -179,6 +232,8 @@ func doRequest(url string, method string, params string) ([]byte, error) {
 	if err != nil {
 		return result, err
 	}
+	// In case of session expire returns an error "Forbidden" so we can
+	// handle re-login
 	if response.StatusCode == http.StatusForbidden {
 		return result, errors.New("Forbidden")
 	}
@@ -186,6 +241,7 @@ func doRequest(url string, method string, params string) ([]byte, error) {
 		return result, errors.New("Could not connect to card")
 	}
 	bodyBytes, err := ioutil.ReadAll(response.Body)
+	// same as above returns forbidden in case a login form exists.
 	if loginFormExist(bodyBytes) == true {
 		return result, errors.New("Forbidden")
 	}
@@ -242,29 +298,6 @@ func getSequence(conf *Config) (sequenceReq, error) {
 	}
 	xml.Unmarshal(response, &result)
 	return result, err
-}
-func zonesZStatus(zones [][4]int) {
-	for i, _ := range zones {
-		zoneZStatus(i, zones)
-	}
-}
-func zoneZStatus(i int, zones [][4]int) {
-	mask := 0x01 << (uint(i) % 16)
-	byteIndex := int(math.Floor(float64(i) / 16))
-
-	// on alarm
-	if zones[5][byteIndex]&mask != 0 {
-		fmt.Println("Zone " + strconv.Itoa(i) + "is on alarm")
-	}
-	// ByPass
-	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
-		fmt.Println("Zone " + strconv.Itoa(i) + " is not ByPassed")
-	}
-	// Not Ready
-	if zones[0][byteIndex]&mask != 0 {
-		fmt.Println("Zone " + strconv.Itoa(i) + " is not READY")
-	}
-
 }
 
 // Handles Zstate request
