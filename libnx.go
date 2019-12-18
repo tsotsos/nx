@@ -22,7 +22,6 @@ type Config struct {
 	User     string
 	Pin      string
 	Url      string
-	Session  string //session id
 }
 
 const (
@@ -36,9 +35,9 @@ const (
 // Stores latest data for Zones such as
 // names, statuses and total number
 type Zones struct {
-	Number int
 	Names  []string
 	Status []int
+	Number int `len(Status)`
 }
 
 type SystemStatus struct {
@@ -68,6 +67,7 @@ type zstateReq struct {
 	Zdat   [4]int
 }
 
+// session id global
 var sessionId string
 
 // Sets session to global and file
@@ -99,12 +99,17 @@ func getSession() string {
 	return session
 }
 
-func ZoneNames(conf *Config) {
-	data, err := zonesRq(conf)
-	fmt.Println(data)
-	if err != nil {
-		fmt.Println(err)
+// ZoneNames fetch current zone names in ordered array
+func ZoneNames(conf *Config) ([]string, error) {
+	result, err := getZones(conf)
+	if err != nil && err.Error() == "Forbidden" {
+		_, err := login(conf)
+		if err != nil {
+			return result, err
+		}
+		result, err = getZones(conf)
 	}
+	return result, err
 }
 
 // ZoneStatuses fetch status for each zone in the system
@@ -252,8 +257,6 @@ func doRequest(path string, method string, params url.Values) ([]byte, error) {
 		return result, errors.New("Forbidden")
 	}
 	if response.StatusCode != http.StatusOK {
-		fmt.Println(response.StatusCode)
-		fmt.Println(response.Header)
 		return result, errors.New("Could not connect to card")
 	}
 	bodyBytes, err := ioutil.ReadAll(response.Body)
@@ -298,7 +301,6 @@ func getStatus(conf *Config) (SystemStatus, error) {
 	params.Add("sess", getSession())
 	params.Add("arsel", "7")
 	response, err := doRequest(path, "POST", params)
-	fmt.Println(string(response))
 	result := SystemStatus{}
 	if err != nil {
 		return result, err
@@ -345,7 +347,7 @@ func getZstate(conf *Config, state int) (zstateReq, error) {
 // Handles request for zone names and parsing embeded javascript variable
 // from zones.html file.
 // Unfortunately no other way found
-func zonesRq(conf *Config) ([]string, error) {
+func getZones(conf *Config) ([]string, error) {
 	var names []string
 	path := conf.Url + "user/zones.htm"
 	params := url.Values{}
