@@ -32,6 +32,14 @@ const (
 	InAlarm
 )
 
+// Stores latest data for Zones such as
+// names, statuses and total number
+type Zones struct {
+	Number int
+	Names  []string
+	Status []int
+}
+
 type SystemStatus struct {
 	Abank          int    `xml:"abank"`
 	Seq            int    `xml:"aseq"`
@@ -90,6 +98,7 @@ func getSession() string {
 	return session
 }
 
+// ZoneStatuses fetch status for each zone in the system
 func ZonesStatuses(conf *Config) (string, error) {
 	var rawSequence sequenceReq
 	rawSequence, err := Sequence(conf)
