@@ -14,6 +14,7 @@ func init() {
 
 func main() {
 	conf := NewConfig()
+	ZoneNames(conf)
 	st, err := ZonesStatuses(conf)
 	if err != nil {
 		fmt.Println(err)
