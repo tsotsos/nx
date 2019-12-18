@@ -231,18 +231,14 @@ func zoneZStatus(i int, zones [][4]int) int {
 }
 
 // HTTP request wrapper
-func doRequest(url string, method string, params string) ([]byte, error) {
-
+func doRequest(path string, method string, params url.Values) ([]byte, error) {
 	var result []byte
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-
-	//if method == "POST" {
-	body := strings.NewReader(params)
-	request, err := http.NewRequest(method, url, body)
-	//}
+	body := strings.NewReader(params.Encode())
+	request, err := http.NewRequest(method, path, body)
 	if err != nil {
 		return result, err
 	}
@@ -274,11 +270,13 @@ func doRequest(url string, method string, params string) ([]byte, error) {
 func login(conf *Config) (string, error) {
 	var result string
 	var session string
+	path := conf.Url + "login.cgi"
 	re := regexp.MustCompile(
 		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
-	params := "lgname=" + conf.User + "&lgpin=" + conf.Pin
-	url := conf.Url + "login.cgi"
-	response, err := doRequest(url, "POST", params)
+	params := url.Values{}
+	params.Add("lgname", conf.User)
+	params.Add("lgpin", conf.Pin)
+	response, err := doRequest(path, "POST", params)
 
 	if err != nil {
 		return result, err
@@ -295,9 +293,11 @@ func login(conf *Config) (string, error) {
 
 // Handles the status request and response parsing
 func getStatus(conf *Config) (SystemStatus, error) {
-	params := "sess=" + getSession() + "&arsel=7"
-	url := conf.Url + "user/status.xml"
-	response, err := doRequest(url, "POST", params)
+	path := conf.Url + "user/status.xml"
+	params := url.Values{}
+	params.Add("sess", getSession())
+	params.Add("arsel", "7")
+	response, err := doRequest(path, "POST", params)
 	fmt.Println(string(response))
 	result := SystemStatus{}
 	if err != nil {
@@ -309,9 +309,10 @@ func getStatus(conf *Config) (SystemStatus, error) {
 
 // Handles Sequence request
 func getSequence(conf *Config) (sequenceReq, error) {
-	params := "sess=" + getSession()
-	url := conf.Url + "user/seq.xml"
-	response, err := doRequest(url, "POST", params)
+	params := url.Values{}
+	params.Add("sess", getSession())
+	path := conf.Url + "user/seq.xml"
+	response, err := doRequest(path, "POST", params)
 	result := sequenceReq{}
 	if err != nil {
 		return result, err
@@ -322,10 +323,12 @@ func getSequence(conf *Config) (sequenceReq, error) {
 
 // Handles Zstate request
 func getZstate(conf *Config, state int) (zstateReq, error) {
-	url := conf.Url + "user/zstate.xml"
+	path := conf.Url + "user/zstate.xml"
 	result := zstateReq{}
-	params := "sess=" + getSession() + "&state=" + strconv.Itoa(state)
-	response, err := doRequest(url, "POST", params)
+	params := url.Values{}
+	params.Add("sess", getSession())
+	params.Add("state", strconv.Itoa(state))
+	response, err := doRequest(path, "POST", params)
 	xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
 		stAr := strings.Split(result.ZdatS, ",")
@@ -345,7 +348,8 @@ func getZstate(conf *Config, state int) (zstateReq, error) {
 func zonesRq(conf *Config) ([]string, error) {
 	var names []string
 	path := conf.Url + "user/zones.htm"
-	params := "sess=" + getSession()
+	params := url.Values{}
+	params.Add("sess", getSession())
 	response, err := doRequest(path, "GET", params)
 	if err != nil {
 		return names, err
