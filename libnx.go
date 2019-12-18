@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -32,11 +31,20 @@ const (
 	InAlarm
 )
 
+// Stores all statuses for a Zone
+type ZoneStatus struct {
+	Ready        bool
+	NotReady     bool
+	ByPass       bool
+	SysCondition bool
+	InAlarm      bool
+}
+
 // Stores latest data for Zones such as
 // names, statuses and total number
 type Zones struct {
 	Names  []string
-	Status []int
+	Status []ZoneStatus
 	Number int `len(Status)`
 }
 
@@ -53,6 +61,12 @@ type SystemStatus struct {
 	BypassOn       bool   `xml:"stat10"`
 	ChimeOn        bool   `xml:"stat15"`
 	Message        string `xml:"sysflt"`
+}
+
+type httpRequest struct {
+	Path   string
+	Method string
+	Params url.Values
 }
 
 type sequenceReq struct {
@@ -113,24 +127,23 @@ func ZoneNames(conf *Config) ([]string, error) {
 }
 
 // ZoneStatuses fetch status for each zone in the system
-func ZonesStatuses(conf *Config) (string, error) {
-	var rawSequence sequenceReq
+func ZonesStatuses(conf *Config) ([]ZoneStatus, error) {
 	rawSequence, err := Sequence(conf)
+	if err != nil && err.Error() == "Forbidden" {
+		_, err := login(conf)
+		if err != nil {
+			return nil, err
+		}
+		rawSequence, err = Sequence(conf)
+	}
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
 	for i, _ := range zones {
-		//		n, _ := strconv.Atoi(zones[i])
-		//		if n != zonesData[i] {
 		zstate, _ := Zstate(conf, i)
-		//if err != nil {
-		//	panic(err)
-		//}
 		zonesData[zstate.Zstate] = zstate.Zdat
-		//spew.Dump(zstate)
-		//		}
 	}
-	fmt.Println(zonesZStatus(zonesData))
-	return "", err
+	zonesStatus := zonesZStatus(zonesData)
+	return zonesStatus, err
 }
 
 // Returns Sequence. Via this request we can retrieve seq.xml response but still
@@ -201,8 +214,8 @@ func loginFormExist(response []byte) bool {
 }
 
 // Creates an array of statuses for zones
-func zonesZStatus(zones [][4]int) []int {
-	result := make([]int, len(zones))
+func zonesZStatus(zones [][4]int) []ZoneStatus {
+	result := make([]ZoneStatus, len(zones))
 	for i, _ := range zones {
 		result[i] = zoneZStatus(i, zones)
 	}
@@ -210,40 +223,41 @@ func zonesZStatus(zones [][4]int) []int {
 }
 
 // Calculates status for a zone
-func zoneZStatus(i int, zones [][4]int) int {
+func zoneZStatus(i int, zones [][4]int) ZoneStatus {
 	mask := 0x01 << (uint(i) % 16)
 	byteIndex := int(math.Floor(float64(i) / 16))
-
+	status := ZoneStatus{false, false, false, false, false}
 	// In alarm
 	if zones[5][byteIndex]&mask != 0 {
-		return InAlarm
+		status.InAlarm = true
 	}
 	// System condition
 	if zones[1][byteIndex]&mask != 0 || zones[2][byteIndex]&mask != 0 ||
 		zones[6][byteIndex]&mask != 0 || zones[7][byteIndex]&mask != 0 {
-		return SysCondition
+		status.SysCondition = true
 	}
 	// ByPass
 	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
-		return ByPass
+		status.ByPass = true
 	}
 	// Not Ready
 	if zones[0][byteIndex]&mask != 0 {
-		return NotReady
+		status.NotReady = true
+	} else {
+		status.Ready = true
 	}
-	return Ready
-
+	return status
 }
 
 // HTTP request wrapper
-func doRequest(path string, method string, params url.Values) ([]byte, error) {
+func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	var result []byte
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	body := strings.NewReader(params.Encode())
-	request, err := http.NewRequest(method, path, body)
+	body := strings.NewReader(data.Params.Encode())
+	request, err := http.NewRequest(data.Method, data.Path, body)
 	if err != nil {
 		return result, err
 	}
@@ -254,6 +268,11 @@ func doRequest(path string, method string, params url.Values) ([]byte, error) {
 	// In case of session expire returns an error "Forbidden" so we can
 	// handle re-login
 	if response.StatusCode == http.StatusForbidden {
+		if tries > 1 {
+			newSession, _ := login(conf)
+			data.Params.Add("sess", newSession)
+			return doRequest(data, conf, tries-1)
+		}
 		return result, errors.New("Forbidden")
 	}
 	if response.StatusCode != http.StatusOK {
@@ -262,6 +281,11 @@ func doRequest(path string, method string, params url.Values) ([]byte, error) {
 	bodyBytes, err := ioutil.ReadAll(response.Body)
 	// same as above returns forbidden in case a login form exists.
 	if loginFormExist(bodyBytes) == true {
+		if tries > 1 {
+			newSession, _ := login(conf)
+			data.Params.Add("sess", newSession)
+			return doRequest(data, conf, tries-1)
+		}
 		return result, errors.New("Forbidden")
 	}
 	defer response.Body.Close()
@@ -273,13 +297,16 @@ func doRequest(path string, method string, params url.Values) ([]byte, error) {
 func login(conf *Config) (string, error) {
 	var result string
 	var session string
-	path := conf.Url + "login.cgi"
+	var data httpRequest
 	re := regexp.MustCompile(
 		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
-	params := url.Values{}
-	params.Add("lgname", conf.User)
-	params.Add("lgpin", conf.Pin)
-	response, err := doRequest(path, "POST", params)
+
+	data.Path = conf.Url + "login.cgi"
+	data.Params = url.Values{}
+	data.Params.Add("lgname", conf.User)
+	data.Params.Add("lgpin", conf.Pin)
+	data.Method = "POST"
+	response, err := doRequest(data, conf, 1)
 
 	if err != nil {
 		return result, err
@@ -296,11 +323,13 @@ func login(conf *Config) (string, error) {
 
 // Handles the status request and response parsing
 func getStatus(conf *Config) (SystemStatus, error) {
-	path := conf.Url + "user/status.xml"
-	params := url.Values{}
-	params.Add("sess", getSession())
-	params.Add("arsel", "7")
-	response, err := doRequest(path, "POST", params)
+	var data httpRequest
+	data.Path = conf.Url + "user/status.xml"
+	data.Params = url.Values{}
+	data.Params.Add("sess", getSession())
+	data.Params.Add("arsel", "7")
+	data.Method = "POST"
+	response, err := doRequest(data, conf, 2)
 	result := SystemStatus{}
 	if err != nil {
 		return result, err
@@ -311,10 +340,12 @@ func getStatus(conf *Config) (SystemStatus, error) {
 
 // Handles Sequence request
 func getSequence(conf *Config) (sequenceReq, error) {
-	params := url.Values{}
-	params.Add("sess", getSession())
-	path := conf.Url + "user/seq.xml"
-	response, err := doRequest(path, "POST", params)
+	var data httpRequest
+	data.Params = url.Values{}
+	data.Params.Add("sess", getSession())
+	data.Path = conf.Url + "user/seq.xml"
+	data.Method = "POST"
+	response, err := doRequest(data, conf, 2)
 	result := sequenceReq{}
 	if err != nil {
 		return result, err
@@ -325,12 +356,14 @@ func getSequence(conf *Config) (sequenceReq, error) {
 
 // Handles Zstate request
 func getZstate(conf *Config, state int) (zstateReq, error) {
-	path := conf.Url + "user/zstate.xml"
+	var data httpRequest
+	data.Path = conf.Url + "user/zstate.xml"
 	result := zstateReq{}
-	params := url.Values{}
-	params.Add("sess", getSession())
-	params.Add("state", strconv.Itoa(state))
-	response, err := doRequest(path, "POST", params)
+	data.Params = url.Values{}
+	data.Params.Add("sess", getSession())
+	data.Params.Add("state", strconv.Itoa(state))
+	data.Method = "POST"
+	response, err := doRequest(data, conf, 2)
 	xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
 		stAr := strings.Split(result.ZdatS, ",")
@@ -348,11 +381,13 @@ func getZstate(conf *Config, state int) (zstateReq, error) {
 // from zones.html file.
 // Unfortunately no other way found
 func getZones(conf *Config) ([]string, error) {
+	var data httpRequest
 	var names []string
-	path := conf.Url + "user/zones.htm"
-	params := url.Values{}
-	params.Add("sess", getSession())
-	response, err := doRequest(path, "GET", params)
+	data.Path = conf.Url + "user/zones.htm"
+	data.Params = url.Values{}
+	data.Params.Add("sess", getSession())
+	data.Method = "GET"
+	response, err := doRequest(data, conf, 2)
 	if err != nil {
 		return names, err
 	}
