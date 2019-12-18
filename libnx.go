@@ -23,18 +23,9 @@ type Config struct {
 	Url      string
 }
 
-const (
-	Ready = iota
-	NotReady
-	ByPass
-	SysCondition
-	InAlarm
-)
-
 // Stores all statuses for a Zone
 type ZoneStatus struct {
 	Ready        bool
-	NotReady     bool
 	ByPass       bool
 	SysCondition bool
 	InAlarm      bool
@@ -113,87 +104,84 @@ func getSession() string {
 	return session
 }
 
-// ZoneNames fetch current zone names in ordered array
-func ZoneNames(conf *Config) ([]string, error) {
-	result, err := getZones(conf)
-	/*if err != nil && err.Error() == "Forbidden" {
-		_, err := login(conf)
-		if err != nil {
-			return result, err
-		}
-		result, err = getZones(conf)
-	}*/
-	return result, err
-}
-
 // ZoneStatuses fetch status for each zone in the system
 func ZonesStatuses(conf *Config) ([]ZoneStatus, error) {
 	rawSequence, err := Sequence(conf)
-	/*	if err != nil && err.Error() == "Forbidden" {
-		_, err := login(conf)
-		if err != nil {
-			return nil, err
-		}
-		rawSequence, err = Sequence(conf)
-	}*/
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
 	for i, _ := range zones {
 		zstate, _ := Zstate(conf, i)
 		zonesData[zstate.Zstate] = zstate.Zdat
 	}
-	zonesStatus := zonesZStatus(zonesData)
+	zonesStatus := calculateStatuses(zonesData)
 	return zonesStatus, err
 }
 
-// Returns Sequence. Via this request we can retrieve seq.xml response but still
-// in order to retrieve Statuses you should use ZoneStatuses function, since
-// sequence cannot be used without Zstate.
-func Sequence(conf *Config) (sequenceReq, error) {
-	// we try current setted session
-	result := sequenceReq{}
-	result, err := getSequence(conf)
-	if err != nil && err.Error() == "Forbidden" {
-		_, err := login(conf)
-		if err != nil {
-			return result, err
-		}
-		result, err = getSequence(conf)
+// Creates an array of statuses for zones
+func calculateStatuses(zones [][4]int) []ZoneStatus {
+	result := make([]ZoneStatus, len(zones))
+	for i, _ := range zones {
+		result[i] = calculateStatus(i, zones)
 	}
-	return result, err
+	return result
 }
 
-// Returns Zstate result. Zstate cannot be used without Sequence, only by
-// joining Zstate and Sequese requests we can calculate zone statues
-// for this use ZoneStatuses()
-func Zstate(conf *Config, state int) (zstateReq, error) {
-	// we try current setted session
-	result := zstateReq{}
-	result, err := getZstate(conf, state)
-	if err != nil && err.Error() == "Forbidden" {
-		_, err := login(conf)
-		if err != nil {
-			return result, err
-		}
-		result, err = getZstate(conf, state)
+// Calculates status for a zone
+func calculateStatus(i int, zones [][4]int) ZoneStatus {
+	mask := 0x01 << (uint(i) % 16)
+	byteIndex := int(math.Floor(float64(i) / 16))
+	status := ZoneStatus{false, false, false, false}
+	// In alarm
+	if zones[5][byteIndex]&mask != 0 {
+		status.InAlarm = true
 	}
-	return result, err
+	// System condition
+	if zones[1][byteIndex]&mask != 0 || zones[2][byteIndex]&mask != 0 ||
+		zones[6][byteIndex]&mask != 0 || zones[7][byteIndex]&mask != 0 {
+		status.SysCondition = true
+	}
+	// ByPass
+	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
+		status.ByPass = true
+	}
+	// Not Ready
+	if zones[0][byteIndex]&mask == 0 {
+		status.Ready = true
+	}
+	return status
 }
 
-// Status fetches System Statusfrom HTTP server and handles reconnection
-// in case session has been expired
-func Status(conf *Config) (SystemStatus, error) {
-	status := SystemStatus{}
-	// we try current setted session
-	status, err := getStatus(conf)
-	if err != nil && err.Error() == "Forbidden" {
-		_, err := login(conf)
-		if err != nil {
-			return status, err
-		}
-		status, err = getStatus(conf)
+// Retrieves zone names via parsing embeded javascript variable from
+// zones.htm file. Unfortunately no other way found
+func ZonesNames(conf *Config) ([]string, error) {
+	var data httpRequest
+	var names []string
+	data.Path = conf.Url + "user/zones.htm"
+	data.Params = url.Values{}
+	data.Params.Add("sess", getSession())
+	data.Method = "GET"
+	response, err := doRequest(data, conf, 2)
+	if err != nil {
+		return names, err
 	}
-	return status, err
+	var re = regexp.MustCompile(`(?m)var zoneNames = new\sArray\((.*)\);`)
+	for _, match := range re.FindAllStringSubmatch(string(response), -1) {
+		if match[1] == "" {
+			continue
+		}
+		sb := strings.Split(match[1], ",")
+		if len(sb) == 0 {
+			continue
+		}
+		names = make([]string, len(sb))
+		for i, z := range sb {
+			names[i], err = url.PathUnescape(z)
+			if err != nil {
+				names[i] = z
+			}
+		}
+	}
+	return names, err
 }
 
 // Handles the case of login form prompt. In case of session expiration in some
@@ -211,42 +199,6 @@ func loginFormExist(response []byte) bool {
 		return true
 	}
 	return false
-}
-
-// Creates an array of statuses for zones
-func zonesZStatus(zones [][4]int) []ZoneStatus {
-	result := make([]ZoneStatus, len(zones))
-	for i, _ := range zones {
-		result[i] = zoneZStatus(i, zones)
-	}
-	return result
-}
-
-// Calculates status for a zone
-func zoneZStatus(i int, zones [][4]int) ZoneStatus {
-	mask := 0x01 << (uint(i) % 16)
-	byteIndex := int(math.Floor(float64(i) / 16))
-	status := ZoneStatus{false, false, false, false, false}
-	// In alarm
-	if zones[5][byteIndex]&mask != 0 {
-		status.InAlarm = true
-	}
-	// System condition
-	if zones[1][byteIndex]&mask != 0 || zones[2][byteIndex]&mask != 0 ||
-		zones[6][byteIndex]&mask != 0 || zones[7][byteIndex]&mask != 0 {
-		status.SysCondition = true
-	}
-	// ByPass
-	if zones[3][byteIndex]&mask != 0 || zones[4][byteIndex]&mask != 0 {
-		status.ByPass = true
-	}
-	// Not Ready
-	if zones[0][byteIndex]&mask != 0 {
-		status.NotReady = true
-	} else {
-		status.Ready = true
-	}
-	return status
 }
 
 // HTTP request wrapper
@@ -318,13 +270,14 @@ func login(conf *Config) (string, error) {
 	return session, err
 }
 
-// Handles the status request and response parsing
-func getStatus(conf *Config) (SystemStatus, error) {
+// Status fetches System Statusfrom HTTP server and handles reconnection
+// in case session has been expired
+func Status(conf *Config) (SystemStatus, error) {
 	var data httpRequest
 	data.Path = conf.Url + "user/status.xml"
 	data.Params = url.Values{}
 	data.Params.Add("sess", getSession())
-	data.Params.Add("arsel", "7")
+	//	data.Params.Add("arsel", "7")
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 2)
 	result := SystemStatus{}
@@ -335,8 +288,10 @@ func getStatus(conf *Config) (SystemStatus, error) {
 	return result, err
 }
 
-// Handles Sequence request
-func getSequence(conf *Config) (sequenceReq, error) {
+// Returns Sequence. Via this request we can retrieve seq.xml response but still
+// in order to retrieve Statuses you should use ZoneStatuses function, since
+// sequence cannot be used without Zstate.
+func Sequence(conf *Config) (sequenceReq, error) {
 	var data httpRequest
 	data.Params = url.Values{}
 	data.Params.Add("sess", getSession())
@@ -351,8 +306,10 @@ func getSequence(conf *Config) (sequenceReq, error) {
 	return result, err
 }
 
-// Handles Zstate request
-func getZstate(conf *Config, state int) (zstateReq, error) {
+// Returns Zstate result. Zstate cannot be used without Sequence, only by
+// joining Zstate and Sequese requests we can calculate zone statues
+// for this use ZoneStatuses()
+func Zstate(conf *Config, state int) (zstateReq, error) {
 	var data httpRequest
 	data.Path = conf.Url + "user/zstate.xml"
 	result := zstateReq{}
@@ -372,38 +329,4 @@ func getZstate(conf *Config, state int) (zstateReq, error) {
 		}
 	}
 	return result, err
-}
-
-// Handles request for zone names and parsing embeded javascript variable
-// from zones.html file.
-// Unfortunately no other way found
-func getZones(conf *Config) ([]string, error) {
-	var data httpRequest
-	var names []string
-	data.Path = conf.Url + "user/zones.htm"
-	data.Params = url.Values{}
-	data.Params.Add("sess", getSession())
-	data.Method = "GET"
-	response, err := doRequest(data, conf, 2)
-	if err != nil {
-		return names, err
-	}
-	var re = regexp.MustCompile(`(?m)var zoneNames = new\sArray\((.*)\);`)
-	for _, match := range re.FindAllStringSubmatch(string(response), -1) {
-		if match[1] == "" {
-			continue
-		}
-		sb := strings.Split(match[1], ",")
-		if len(sb) == 0 {
-			continue
-		}
-		names = make([]string, len(sb))
-		for i, z := range sb {
-			names[i], err = url.PathUnescape(z)
-			if err != nil {
-				names[i] = z
-			}
-		}
-	}
-	return names, err
 }
