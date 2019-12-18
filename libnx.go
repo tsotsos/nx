@@ -116,26 +116,26 @@ func getSession() string {
 // ZoneNames fetch current zone names in ordered array
 func ZoneNames(conf *Config) ([]string, error) {
 	result, err := getZones(conf)
-	if err != nil && err.Error() == "Forbidden" {
+	/*if err != nil && err.Error() == "Forbidden" {
 		_, err := login(conf)
 		if err != nil {
 			return result, err
 		}
 		result, err = getZones(conf)
-	}
+	}*/
 	return result, err
 }
 
 // ZoneStatuses fetch status for each zone in the system
 func ZonesStatuses(conf *Config) ([]ZoneStatus, error) {
 	rawSequence, err := Sequence(conf)
-	if err != nil && err.Error() == "Forbidden" {
+	/*	if err != nil && err.Error() == "Forbidden" {
 		_, err := login(conf)
 		if err != nil {
 			return nil, err
 		}
 		rawSequence, err = Sequence(conf)
-	}
+	}*/
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
 	for i, _ := range zones {
@@ -265,11 +265,18 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	if err != nil {
 		return result, err
 	}
+	bodyBytes, errBody := ioutil.ReadAll(response.Body)
+	if errBody != nil {
+		return result, errBody
+	}
 	// In case of session expire returns an error "Forbidden" so we can
 	// handle re-login
-	if response.StatusCode == http.StatusForbidden {
+	if response.StatusCode == http.StatusForbidden ||
+		(response.StatusCode == http.StatusOK &&
+			loginFormExist(bodyBytes) == true) {
 		if tries > 1 {
 			newSession, _ := login(conf)
+			data.Params.Del("sess")
 			data.Params.Add("sess", newSession)
 			return doRequest(data, conf, tries-1)
 		}
@@ -277,16 +284,6 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	}
 	if response.StatusCode != http.StatusOK {
 		return result, errors.New("Could not connect to card")
-	}
-	bodyBytes, err := ioutil.ReadAll(response.Body)
-	// same as above returns forbidden in case a login form exists.
-	if loginFormExist(bodyBytes) == true {
-		if tries > 1 {
-			newSession, _ := login(conf)
-			data.Params.Add("sess", newSession)
-			return doRequest(data, conf, tries-1)
-		}
-		return result, errors.New("Forbidden")
 	}
 	defer response.Body.Close()
 	return bodyBytes, err
