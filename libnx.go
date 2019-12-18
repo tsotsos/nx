@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -96,6 +97,14 @@ func getSession() string {
 	session := string(content)
 	sessionId = session
 	return session
+}
+
+func ZoneNames(conf *Config) {
+	data, err := zonesRq(conf)
+	fmt.Println(data)
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 // ZoneStatuses fetch status for each zone in the system
@@ -247,6 +256,8 @@ func doRequest(url string, method string, params string) ([]byte, error) {
 		return result, errors.New("Forbidden")
 	}
 	if response.StatusCode != http.StatusOK {
+		fmt.Println(response.StatusCode)
+		fmt.Println(response.Header)
 		return result, errors.New("Could not connect to card")
 	}
 	bodyBytes, err := ioutil.ReadAll(response.Body)
@@ -326,4 +337,35 @@ func getZstate(conf *Config, state int) (zstateReq, error) {
 		}
 	}
 	return result, err
+}
+
+// Handles request for zone names and parsing embeded javascript variable
+// from zones.html file.
+// Unfortunately no other way found
+func zonesRq(conf *Config) ([]string, error) {
+	var names []string
+	path := conf.Url + "user/zones.htm"
+	params := "sess=" + getSession()
+	response, err := doRequest(path, "GET", params)
+	if err != nil {
+		return names, err
+	}
+	var re = regexp.MustCompile(`(?m)var zoneNames = new\sArray\((.*)\);`)
+	for _, match := range re.FindAllStringSubmatch(string(response), -1) {
+		if match[1] == "" {
+			continue
+		}
+		sb := strings.Split(match[1], ",")
+		if len(sb) == 0 {
+			continue
+		}
+		names = make([]string, len(sb))
+		for i, z := range sb {
+			names[i], err = url.PathUnescape(z)
+			if err != nil {
+				names[i] = z
+			}
+		}
+	}
+	return names, err
 }
