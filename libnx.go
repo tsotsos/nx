@@ -223,8 +223,7 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	if errBody != nil {
 		return result, errBody
 	}
-	// In case of session expire returns an error "Forbidden" so we can
-	// handle re-login
+	// In case of session expire and given enought tries we handle re-login
 	if response.StatusCode == http.StatusForbidden ||
 		(response.StatusCode == http.StatusOK &&
 			loginFormExist(bodyBytes) == true) {
