@@ -201,7 +201,9 @@ func loginFormExist(response []byte) bool {
 	return false
 }
 
-// HTTP request wrapper
+// HTTP request wrapper. Responsible for all requests. Accept httpRequest struct
+// and Config. Also handles re-try, in case of expired session it may re-login
+// if tries is greater than 1
 func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	var result []byte
 	tr := &http.Transport{
@@ -232,7 +234,7 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 			data.Params.Add("sess", newSession)
 			return doRequest(data, conf, tries-1)
 		}
-		return result, errors.New("Forbidden")
+		return result, err
 	}
 	if response.StatusCode != http.StatusOK {
 		return result, errors.New("Could not connect to card")
