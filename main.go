@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
+	//"github.com/davecgh/go-spew/spew"
 	"github.com/joho/godotenv"
 )
 
@@ -15,18 +15,22 @@ func init() {
 
 func main() {
 	conf := NewConfig()
-	names, err := ZonesNames(conf)
+	/*	names, err := ZonesNames(conf)
+		if err != nil {
+			panic(err)
+		}
+		st, err := ZonesStatuses(conf)
+		if err != nil {
+			panic(err)
+		}
+		for i, v := range st {
+			fmt.Println(names[i])
+			fmt.Println(v)
+		}
+		//overal, _ := Status(conf)
+		//spew.Dump(overal)*/
+	err := SetByPass(conf)
 	if err != nil {
 		panic(err)
 	}
-	st, err := ZonesStatuses(conf)
-	if err != nil {
-		panic(err)
-	}
-	for i, v := range st {
-		fmt.Println(names[i])
-		fmt.Println(v)
-	}
-	overal, _ := Status(conf)
-	spew.Dump(overal)
 }

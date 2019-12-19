@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/xml"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -57,7 +58,7 @@ type SystemStatus struct {
 type httpRequest struct {
 	Path   string
 	Method string
-	Params url.Values
+	Params string
 }
 
 type sequenceReq struct {
@@ -157,8 +158,7 @@ func ZonesNames(conf *Config) ([]string, error) {
 	var data httpRequest
 	var names []string
 	data.Path = conf.Url + "user/zones.htm"
-	data.Params = url.Values{}
-	data.Params.Add("sess", getSession())
+	data.Params = ""
 	data.Method = "GET"
 	response, err := doRequest(data, conf, 2)
 	if err != nil {
@@ -201,6 +201,13 @@ func loginFormExist(response []byte) bool {
 	return false
 }
 
+func addSession(params string, session string) string {
+	if session != "" {
+		return "sess=" + session + "&" + params
+	}
+	return params
+}
+
 // HTTP request wrapper. Responsible for all requests. Accept httpRequest struct
 // and Config. Also handles re-try, in case of expired session it may re-login
 // if tries is greater than 1
@@ -210,7 +217,7 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	client := &http.Client{Transport: tr}
-	body := strings.NewReader(data.Params.Encode())
+	body := strings.NewReader(data.Params)
 	request, err := http.NewRequest(data.Method, data.Path, body)
 	if err != nil {
 		return result, err
@@ -223,14 +230,20 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	if errBody != nil {
 		return result, errBody
 	}
+	fmt.Println("\n\nREQUEST DATA\n\n")
+	fmt.Println(data)
+	fmt.Println(string(bodyBytes))
+	fmt.Println("\n\nREQUEST DATA END !!!\n\n")
 	// In case of session expire and given enought tries we handle re-login
 	if response.StatusCode == http.StatusForbidden ||
 		(response.StatusCode == http.StatusOK &&
 			loginFormExist(bodyBytes) == true) {
 		if tries > 1 {
-			newSession, _ := login(conf)
-			data.Params.Del("sess")
-			data.Params.Add("sess", newSession)
+			if data.Path == "login.cgi" == false {
+				fmt.Println("retry no login")
+				newSession, _ := login(conf)
+				data.Params = addSession(data.Params, newSession)
+			}
 			return doRequest(data, conf, tries-1)
 		}
 		return result, err
@@ -252,9 +265,7 @@ func login(conf *Config) (string, error) {
 		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
 
 	data.Path = conf.Url + "login.cgi"
-	data.Params = url.Values{}
-	data.Params.Add("lgname", conf.User)
-	data.Params.Add("lgpin", conf.Pin)
+	data.Params = "lgname=" + conf.User + "&" + "lgpin=" + conf.Pin
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 1)
 
@@ -276,9 +287,7 @@ func login(conf *Config) (string, error) {
 func Status(conf *Config) (SystemStatus, error) {
 	var data httpRequest
 	data.Path = conf.Url + "user/status.xml"
-	data.Params = url.Values{}
-	data.Params.Add("sess", getSession())
-	//	data.Params.Add("arsel", "7")
+	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 2)
 	result := SystemStatus{}
@@ -294,9 +303,8 @@ func Status(conf *Config) (SystemStatus, error) {
 // sequence cannot be used without Zstate.
 func Sequence(conf *Config) (sequenceReq, error) {
 	var data httpRequest
-	data.Params = url.Values{}
-	data.Params.Add("sess", getSession())
 	data.Path = conf.Url + "user/seq.xml"
+	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 2)
 	result := sequenceReq{}
@@ -314,10 +322,8 @@ func Zstate(conf *Config, state int) (zstateReq, error) {
 	var data httpRequest
 	data.Path = conf.Url + "user/zstate.xml"
 	result := zstateReq{}
-	data.Params = url.Values{}
-	data.Params.Add("sess", getSession())
-	data.Params.Add("state", strconv.Itoa(state))
 	data.Method = "POST"
+	data.Params = addSession("state="+strconv.Itoa(state), getSession())
 	response, err := doRequest(data, conf, 2)
 	xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
@@ -330,4 +336,18 @@ func Zstate(conf *Config, state int) (zstateReq, error) {
 		}
 	}
 	return result, err
+}
+
+// Sets a zone to "Bypass state
+func SetByPass(conf *Config) error {
+	var data httpRequest
+	data.Path = conf.Url + "user/zonefunction.cgi"
+	data.Params = addSession("comm=82&data0=5", getSession())
+	data.Method = "POST"
+	fmt.Println("DATA in FUNC")
+	fmt.Println(data)
+	resp, err := doRequest(data, conf, 2)
+	fmt.Println(string(resp))
+
+	return err
 }
