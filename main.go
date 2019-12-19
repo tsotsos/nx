@@ -29,7 +29,7 @@ func main() {
 		}
 		//overal, _ := Status(conf)
 		//spew.Dump(overal)*/
-	err := SetByPass(conf)
+	err := SetByPass(1, conf)
 	if err != nil {
 		panic(err)
 	}

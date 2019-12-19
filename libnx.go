@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"encoding/xml"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"net/http"
@@ -230,17 +229,12 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 	if errBody != nil {
 		return result, errBody
 	}
-	fmt.Println("\n\nREQUEST DATA\n\n")
-	fmt.Println(data)
-	fmt.Println(string(bodyBytes))
-	fmt.Println("\n\nREQUEST DATA END !!!\n\n")
 	// In case of session expire and given enought tries we handle re-login
 	if response.StatusCode == http.StatusForbidden ||
 		(response.StatusCode == http.StatusOK &&
 			loginFormExist(bodyBytes) == true) {
 		if tries > 1 {
 			if data.Path == "login.cgi" == false {
-				fmt.Println("retry no login")
 				newSession, _ := login(conf)
 				data.Params = addSession(data.Params, newSession)
 			}
@@ -339,15 +333,12 @@ func Zstate(conf *Config, state int) (zstateReq, error) {
 }
 
 // Sets a zone to "Bypass state
-func SetByPass(conf *Config) error {
+func SetByPass(zone int, conf *Config) error {
 	var data httpRequest
+	params := "comm=82&data0=" + strconv.Itoa(zone)
 	data.Path = conf.Url + "user/zonefunction.cgi"
-	data.Params = addSession("comm=82&data0=5", getSession())
+	data.Params = addSession(params, getSession())
 	data.Method = "POST"
-	fmt.Println("DATA in FUNC")
-	fmt.Println(data)
-	resp, err := doRequest(data, conf, 2)
-	fmt.Println(string(resp))
-
+	_, err := doRequest(data, conf, 2)
 	return err
 }
