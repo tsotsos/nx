@@ -31,22 +31,8 @@ const (
 	Chime
 )
 
-// Stores all statuses for a Zone
-type ZoneStatus struct {
-	Ready        bool
-	ByPass       bool
-	SysCondition bool
-	InAlarm      bool
-}
-
-// Stores latest data for Zones such as
-// names, statuses and total number
-type Zones struct {
-	Names  []string
-	Status []ZoneStatus
-	Number int `len(Status)`
-}
-
+// Complete information about system and zones status
+// TODO: Should re-implement this structure to support multiple areas
 type SystemStatus struct {
 	Abank          int    `xml:"abank"`
 	Seq            int    `xml:"aseq"`
@@ -60,8 +46,25 @@ type SystemStatus struct {
 	BypassOn       bool   `xml:"stat10"`
 	ChimeOn        bool   `xml:"stat15"`
 	Message        string `xml:"sysflt"`
+	Zones          zones
 }
 
+// Stores all statuses for a Zone
+type zoneStatus struct {
+	Ready        bool
+	ByPass       bool
+	SysCondition bool
+	InAlarm      bool
+}
+
+// Stores latest data for Zones such as
+// names, statuses and total number
+type zones struct {
+	Names  []string
+	Status []zoneStatus
+}
+
+// Keeps all data needed for a NX card HTTP request
 type httpRequest struct {
 	Path   string
 	Method string
@@ -113,7 +116,7 @@ func getSession() string {
 }
 
 // ZoneStatuses fetch status for each zone in the system
-func ZonesStatuses(conf *Config) ([]ZoneStatus, error) {
+func ZonesStatuses(conf *Config) ([]zoneStatus, error) {
 	rawSequence, err := Sequence(conf)
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
@@ -126,8 +129,8 @@ func ZonesStatuses(conf *Config) ([]ZoneStatus, error) {
 }
 
 // Creates an array of statuses for zones
-func calculateStatuses(zones [][4]int) []ZoneStatus {
-	result := make([]ZoneStatus, len(zones))
+func calculateStatuses(zones [][4]int) []zoneStatus {
+	result := make([]zoneStatus, len(zones))
 	for i, _ := range zones {
 		result[i] = calculateStatus(i, zones)
 	}
@@ -135,10 +138,15 @@ func calculateStatuses(zones [][4]int) []ZoneStatus {
 }
 
 // Calculates status for a zone
-func calculateStatus(i int, zones [][4]int) ZoneStatus {
+func calculateStatus(i int, zones [][4]int) zoneStatus {
 	mask := 0x01 << (uint(i) % 16)
 	byteIndex := int(math.Floor(float64(i) / 16))
-	status := ZoneStatus{false, false, false, false}
+	status := zoneStatus{
+		Ready:        false,
+		ByPass:       false,
+		SysCondition: false,
+		InAlarm:      false,
+	}
 	// In alarm
 	if zones[5][byteIndex]&mask != 0 {
 		status.InAlarm = true
