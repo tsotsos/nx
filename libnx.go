@@ -23,6 +23,14 @@ type Config struct {
 	Url      string
 }
 
+// All system triggers
+const (
+	Arm = iota
+	Stay
+	Disarm
+	Chime
+)
+
 // Stores all statuses for a Zone
 type ZoneStatus struct {
 	Ready        bool
@@ -340,5 +348,29 @@ func SetByPass(zone int, conf *Config) error {
 	data.Params = addSession(params, getSession())
 	data.Method = "POST"
 	_, err := doRequest(data, conf, 2)
+	return err
+}
+
+// Handles system statuses.
+func SetSystem(trigger int, conf *Config) error {
+	var params string
+	var data httpRequest
+	switch trigger {
+	case Arm:
+		params = "comm=80&data0=2&data2=17&data1=1"
+	case Stay:
+		params = "comm=80&data0=2&data2=18&data1=1"
+	case Disarm:
+		params = "comm=80&data0=2&data2=16&data1=1"
+	case Chime:
+		params = "comm=80&data0=2&data2=1&data1=1"
+	default:
+		params = "comm=80&data0=2&data2=1&data1=1" // Chime
+	}
+	data.Path = conf.Url + "user/keyfunction.cgi"
+	data.Params = addSession(params, getSession())
+	data.Method = "POST"
+	_, err := doRequest(data, conf, 2)
+
 	return err
 }
