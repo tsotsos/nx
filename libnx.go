@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-type Config struct {
+type Settings struct {
 	Protocol string
 	Host     string
 	Name     string
@@ -31,9 +31,14 @@ const (
 	Chime
 )
 
+type NxAlarm struct {
+	System systemStatus
+	Zones  zones
+}
+
 // Complete information about system and zones status
 // TODO: Should re-implement this structure to support multiple areas
-type SystemStatus struct {
+type systemStatus struct {
 	Abank          int    `xml:"abank"`
 	Seq            int    `xml:"aseq"`
 	Away           bool   `xml:"stat0"`
@@ -46,7 +51,6 @@ type SystemStatus struct {
 	BypassOn       bool   `xml:"stat10"`
 	ChimeOn        bool   `xml:"stat15"`
 	Message        string `xml:"sysflt"`
-	Zones          zones
 }
 
 // Stores all statuses for a Zone
@@ -86,6 +90,28 @@ type zstateReq struct {
 // session id global
 var sessionId string
 
+// Settings creation
+func NewSettings() *Settings {
+	return &Settings{
+		Protocol: getEnv("NX_PROTOCOL", ""),
+		Host:     getEnv("NX_HOST", ""),
+		Name:     getEnv("NX_NANE", ""),
+		User:     getEnv("NX_USER", ""),
+		Pin:      getEnv("NX_PIN", ""),
+		Url: getEnv("NX_PROTOCOL", "") + "://" +
+			getEnv("NX_HOST", "") + "/",
+	}
+}
+
+// returns Environment (string) variable or default value
+func getEnv(key string, defaultVal string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+
+	return defaultVal
+}
+
 // Sets session to global and file
 func setSession(session string) {
 	sessionId = session
@@ -116,7 +142,7 @@ func getSession() string {
 }
 
 // ZoneStatuses fetch status for each zone in the system
-func ZonesStatuses(conf *Config) ([]zoneStatus, error) {
+func ZonesStatuses(conf *Settings) ([]zoneStatus, error) {
 	rawSequence, err := Sequence(conf)
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
@@ -169,7 +195,7 @@ func calculateStatus(i int, zones [][4]int) zoneStatus {
 
 // Retrieves zone names via parsing embeded javascript variable from
 // zones.htm file. Unfortunately no other way found
-func ZonesNames(conf *Config) ([]string, error) {
+func ZonesNames(conf *Settings) ([]string, error) {
 	var data httpRequest
 	var names []string
 	data.Path = conf.Url + "user/zones.htm"
@@ -224,9 +250,9 @@ func addSession(params string, session string) string {
 }
 
 // HTTP request wrapper. Responsible for all requests. Accept httpRequest struct
-// and Config. Also handles re-try, in case of expired session it may re-login
+// and Settings. Also handles re-try, in case of expired session it may re-login
 // if tries is greater than 1
-func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
+func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
 	var result []byte
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -267,7 +293,7 @@ func doRequest(data httpRequest, conf *Config, tries int) ([]byte, error) {
 
 // Login to system this function returns session id and also save it to a file
 // and global
-func login(conf *Config) (string, error) {
+func login(conf *Settings) (string, error) {
 	var result string
 	var session string
 	var data httpRequest
@@ -294,13 +320,13 @@ func login(conf *Config) (string, error) {
 
 // Status fetches System Statusfrom HTTP server and handles reconnection
 // in case session has been expired
-func Status(conf *Config) (SystemStatus, error) {
+func Status(conf *Settings) (systemStatus, error) {
 	var data httpRequest
+	var result systemStatus
 	data.Path = conf.Url + "user/status.xml"
 	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 2)
-	result := SystemStatus{}
 	if err != nil {
 		return result, err
 	}
@@ -311,13 +337,13 @@ func Status(conf *Config) (SystemStatus, error) {
 // Returns Sequence. Via this request we can retrieve seq.xml response but still
 // in order to retrieve Statuses you should use ZoneStatuses function, since
 // sequence cannot be used without Zstate.
-func Sequence(conf *Config) (sequenceReq, error) {
+func Sequence(conf *Settings) (sequenceReq, error) {
 	var data httpRequest
+	var result sequenceReq
 	data.Path = conf.Url + "user/seq.xml"
 	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := doRequest(data, conf, 2)
-	result := sequenceReq{}
 	if err != nil {
 		return result, err
 	}
@@ -328,10 +354,10 @@ func Sequence(conf *Config) (sequenceReq, error) {
 // Returns Zstate result. Zstate cannot be used without Sequence, only by
 // joining Zstate and Sequese requests we can calculate zone statues
 // for this use ZoneStatuses()
-func Zstate(conf *Config, state int) (zstateReq, error) {
+func Zstate(conf *Settings, state int) (zstateReq, error) {
 	var data httpRequest
+	var result zstateReq
 	data.Path = conf.Url + "user/zstate.xml"
-	result := zstateReq{}
 	data.Method = "POST"
 	data.Params = addSession("state="+strconv.Itoa(state), getSession())
 	response, err := doRequest(data, conf, 2)
@@ -349,7 +375,7 @@ func Zstate(conf *Config, state int) (zstateReq, error) {
 }
 
 // Sets a zone to "Bypass state
-func SetByPass(zone int, conf *Config) error {
+func SetByPass(zone int, conf *Settings) error {
 	var data httpRequest
 	params := "comm=82&data0=" + strconv.Itoa(zone)
 	data.Path = conf.Url + "user/zonefunction.cgi"
@@ -360,7 +386,7 @@ func SetByPass(zone int, conf *Config) error {
 }
 
 // Handles system statuses.
-func SetSystem(trigger int, conf *Config) error {
+func SetSystem(trigger int, conf *Settings) error {
 	var params string
 	var data httpRequest
 	switch trigger {
