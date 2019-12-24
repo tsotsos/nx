@@ -90,10 +90,10 @@ type zstateReq struct {
 	Zdat   [4]int
 }
 
-// session id global
+// SessionID declaration. It holds the assigned session id from NX.
 var sessionID string
 
-// NxAlarm constructor
+// NewNxAlarm is a constructor for NxAlarm
 func NewNxAlarm() *NxAlarm {
 	return &NxAlarm{
 		System: systemStatus{},
@@ -110,13 +110,13 @@ func NewNxAlarm() *NxAlarm {
 	}
 }
 
-// Adds new Settings to NxAlarm
+// AddSettings adds new Settings to NxAlarm
 func (nx *NxAlarm) AddSettings(conf Settings) *NxAlarm {
 	nx.Settings = conf
 	return nx
 }
 
-// Adds new Zone Names to NxAlarm. This way we can overide the
+// AddZoneNames adds new Zone Names to NxAlarm. This way we can overide the
 // default zone names comming from NX.
 // This method can be quite usefull since the NX may have issues
 // when saving zone names to Alarm, in some setups it doesn't even
@@ -126,7 +126,7 @@ func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
 	return nx
 }
 
-// Status fetches System Statusfrom HTTP server
+// SystemStatus fetches System Statusfrom HTTP server
 func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
 	var data httpRequest
 	var result systemStatus
@@ -163,7 +163,7 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 	return nx, err
 }
 
-// Sets a zone to "Bypass state
+// SetByPass sets a zone to "Bypass state
 func (nx *NxAlarm) SetByPass(zone int) error {
 	var data httpRequest
 	params := "comm=82&data0=" + strconv.Itoa(zone)
@@ -174,7 +174,7 @@ func (nx *NxAlarm) SetByPass(zone int) error {
 	return err
 }
 
-// Sets system triggers.
+// SetSystem sets system triggers.
 // Allowed triggers are:
 // - Arm
 // - Stay
