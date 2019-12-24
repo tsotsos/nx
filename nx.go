@@ -117,8 +117,8 @@ func (nx *NxAlarm) AddSettings(conf Settings) *NxAlarm {
 }
 
 // AddZoneNames adds new Zone Names to NxAlarm. This way we can overide the
-// default zone names comming from NX.
-// This method can be quite usefull since the NX may have issues
+// default zone names coming from NX.
+// This method can be quite useful since the NX may have issues
 // when saving zone names to Alarm, in some setups it doesn't even
 // share these names with keypads.
 func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
@@ -149,7 +149,7 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 	if err != nil {
 		return nx, err
 	}
-	// retrieves and caclulate various zone
+	// retrieves and calculate various zone
 	// statuses
 	rawSequence, err := sequence(nx.Settings)
 	zones := strings.Split(rawSequence.Zones, ",")
@@ -283,7 +283,7 @@ func calculateStatus(i int, zones [][4]int) zoneStatus {
 	return status
 }
 
-// Retrieves zone names via parsing embeded javascript variable from
+// Retrieves zone names via parsing embedded javascript variable from
 // zones.htm file. Unfortunately no other way found
 func zonesNames(conf Settings) ([]string, error) {
 	var data httpRequest
