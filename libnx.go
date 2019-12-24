@@ -108,11 +108,17 @@ func NewNxAlarm() *NxAlarm {
 	}
 }
 
+// Adds new Settings to NxAlarm
 func (nx *NxAlarm) AddSettings(conf Settings) *NxAlarm {
 	nx.Settings = conf
 	return nx
 }
 
+// Adds new Zone Names to NxAlarm. This way we can overide the
+// default zone names comming from NX.
+// This method can be quite usefull since the NX may have issues
+// when saving zone names to Alarm, in some setups it doesn't even
+// share these names with keypads.
 func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
 	nx.Zones.Names = names
 	return nx
