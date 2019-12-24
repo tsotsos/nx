@@ -108,6 +108,16 @@ func NewNxAlarm() *NxAlarm {
 	}
 }
 
+func (nx *NxAlarm) AddSettings(conf Settings) *NxAlarm {
+	nx.Settings = conf
+	return nx
+}
+
+func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
+	nx.Zones.Names = names
+	return nx
+}
+
 // Status fetches System Statusfrom HTTP server
 func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
 	var data httpRequest
@@ -188,15 +198,6 @@ func (nx *NxAlarm) SetSystem(trigger int) error {
 	return err
 }
 
-// returns Environment (string) variable or default value
-func getEnv(key string, defaultVal string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-
-	return defaultVal
-}
-
 // Sets session to global and file
 func setSession(session string) {
 	sessionId = session
@@ -224,6 +225,15 @@ func getSession() string {
 	session := string(content)
 	sessionId = session
 	return session
+}
+
+// returns Environment (string) variable or default value
+func getEnv(key string, defaultVal string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+
+	return defaultVal
 }
 
 // Creates an array of statuses for zones
