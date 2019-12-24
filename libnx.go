@@ -154,7 +154,7 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 	rawSequence, err := sequence(nx.Settings)
 	zones := strings.Split(rawSequence.Zones, ",")
 	zonesData := make([][4]int, len(zones))
-	for i, _ := range zones {
+	for i := range zones {
 		zstate, _ := zstate(nx.Settings, i)
 		zonesData[zstate.Zstate] = zstate.Zdat
 	}
@@ -247,7 +247,7 @@ func getEnv(key string, defaultVal string) string {
 // Creates an array of statuses for zones
 func calculateStatuses(zones [][4]int) []zoneStatus {
 	result := make([]zoneStatus, len(zones))
-	for i, _ := range zones {
+	for i := range zones {
 		result[i] = calculateStatus(i, zones)
 	}
 	return result
