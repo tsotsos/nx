@@ -32,8 +32,9 @@ const (
 )
 
 type NxAlarm struct {
-	System systemStatus
-	Zones  zones
+	System   systemStatus
+	Zones    zones
+	Settings Settings
 }
 
 // Complete information about system and zones status
@@ -101,6 +102,38 @@ func NewSettings() *Settings {
 		Url: getEnv("NX_PROTOCOL", "") + "://" +
 			getEnv("NX_HOST", "") + "/",
 	}
+}
+
+func NewNxAlarm() *NxAlarm {
+	return &NxAlarm{
+		System: systemStatus{},
+		Zones:  zones{},
+		Settings: Settings{
+			Protocol: getEnv("NX_PROTOCOL", ""),
+			Host:     getEnv("NX_HOST", ""),
+			Name:     getEnv("NX_NANE", ""),
+			User:     getEnv("NX_USER", ""),
+			Pin:      getEnv("NX_PIN", ""),
+			Url: getEnv("NX_PROTOCOL", "") + "://" +
+				getEnv("NX_HOST", "") + "/",
+		},
+	}
+}
+
+// Status fetches System Statusfrom HTTP server
+func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
+	var data httpRequest
+	var result systemStatus
+	data.Path = nx.Settings.Url + "user/status.xml"
+	data.Params = addSession("", getSession())
+	data.Method = "POST"
+	response, err := makeRequest(data, nx.Settings, 2)
+	if err != nil {
+		return nx, err
+	}
+	xml.Unmarshal(response, &result)
+	nx.System = result
+	return nx, err
 }
 
 // returns Environment (string) variable or default value
@@ -248,11 +281,16 @@ func addSession(params string, session string) string {
 	}
 	return params
 }
+func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
+	var err error
+	var b []byte
+	return b, err
+}
 
 // HTTP request wrapper. Responsible for all requests. Accept httpRequest struct
 // and Settings. Also handles re-try, in case of expired session it may re-login
 // if tries is greater than 1
-func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
+func makeRequest(data httpRequest, conf Settings, tries int) ([]byte, error) {
 	var result []byte
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
@@ -280,7 +318,7 @@ func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
 				newSession, _ := login(conf)
 				data.Params = addSession(data.Params, newSession)
 			}
-			return doRequest(data, conf, tries-1)
+			return makeRequest(data, conf, tries-1)
 		}
 		return result, err
 	}
@@ -293,7 +331,7 @@ func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
 
 // Login to system this function returns session id and also save it to a file
 // and global
-func login(conf *Settings) (string, error) {
+func login(conf Settings) (string, error) {
 	var result string
 	var session string
 	var data httpRequest
@@ -303,7 +341,7 @@ func login(conf *Settings) (string, error) {
 	data.Path = conf.Url + "login.cgi"
 	data.Params = "lgname=" + conf.User + "&" + "lgpin=" + conf.Pin
 	data.Method = "POST"
-	response, err := doRequest(data, conf, 1)
+	response, err := makeRequest(data, conf, 1)
 
 	if err != nil {
 		return result, err
@@ -316,22 +354,6 @@ func login(conf *Settings) (string, error) {
 	}
 	setSession(session)
 	return session, err
-}
-
-// Status fetches System Statusfrom HTTP server and handles reconnection
-// in case session has been expired
-func Status(conf *Settings) (systemStatus, error) {
-	var data httpRequest
-	var result systemStatus
-	data.Path = conf.Url + "user/status.xml"
-	data.Params = addSession("", getSession())
-	data.Method = "POST"
-	response, err := doRequest(data, conf, 2)
-	if err != nil {
-		return result, err
-	}
-	xml.Unmarshal(response, &result)
-	return result, err
 }
 
 // Returns Sequence. Via this request we can retrieve seq.xml response but still
