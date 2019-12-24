@@ -1,4 +1,4 @@
-package Nx
+package nx
 
 import (
 	"crypto/tls"
