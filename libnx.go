@@ -156,7 +156,14 @@ func (nx *NxAlarm) SetByPass(zone int) error {
 	return err
 }
 
-// Handles system statuses.
+// Sets system triggers.
+// Allowed triggers are:
+// - Arm
+// - Stay
+// - Disarm
+// - Chime
+// Triggers are enums, in case of no declared trigger
+// the system will return error
 func SetSystem(trigger int, conf Settings) error {
 	var params string
 	var data httpRequest
@@ -170,7 +177,8 @@ func SetSystem(trigger int, conf Settings) error {
 	case Chime:
 		params = "comm=80&data0=2&data2=1&data1=1"
 	default:
-		params = "comm=80&data0=2&data2=1&data1=1" // Chime
+		err := errors.New("Provided wrong trigger")
+		return err
 	}
 	data.Path = conf.Url + "user/keyfunction.cgi"
 	data.Params = addSession(params, getSession())
