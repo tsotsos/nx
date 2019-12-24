@@ -91,19 +91,7 @@ type zstateReq struct {
 // session id global
 var sessionId string
 
-// Settings creation
-func NewSettings() *Settings {
-	return &Settings{
-		Protocol: getEnv("NX_PROTOCOL", ""),
-		Host:     getEnv("NX_HOST", ""),
-		Name:     getEnv("NX_NANE", ""),
-		User:     getEnv("NX_USER", ""),
-		Pin:      getEnv("NX_PIN", ""),
-		Url: getEnv("NX_PROTOCOL", "") + "://" +
-			getEnv("NX_HOST", "") + "/",
-	}
-}
-
+// NxAlarm constructor
 func NewNxAlarm() *NxAlarm {
 	return &NxAlarm{
 		System: systemStatus{},
@@ -155,7 +143,6 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 	nx.Zones.Status = calculateStatuses(zonesData)
 	nx.Zones.Names = names
 	return nx, err
-
 }
 
 // returns Environment (string) variable or default value
