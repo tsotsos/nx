@@ -164,7 +164,7 @@ func (nx *NxAlarm) SetByPass(zone int) error {
 // - Chime
 // Triggers are enums, in case of no declared trigger
 // the system will return error
-func SetSystem(trigger int, conf Settings) error {
+func (nx *NxAlarm) SetSystem(trigger int) error {
 	var params string
 	var data httpRequest
 	switch trigger {
@@ -180,10 +180,10 @@ func SetSystem(trigger int, conf Settings) error {
 		err := errors.New("Provided wrong trigger")
 		return err
 	}
-	data.Path = conf.Url + "user/keyfunction.cgi"
+	data.Path = nx.Settings.Url + "user/keyfunction.cgi"
 	data.Params = addSession(params, getSession())
 	data.Method = "POST"
-	_, err := makeRequest(data, conf, 2)
+	_, err := makeRequest(data, nx.Settings, 2)
 
 	return err
 }
