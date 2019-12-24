@@ -145,6 +145,41 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 	return nx, err
 }
 
+// Sets a zone to "Bypass state
+func (nx *NxAlarm) SetByPass(zone int) error {
+	var data httpRequest
+	params := "comm=82&data0=" + strconv.Itoa(zone)
+	data.Path = nx.Settings.Url + "user/zonefunction.cgi"
+	data.Params = addSession(params, getSession())
+	data.Method = "POST"
+	_, err := makeRequest(data, nx.Settings, 2)
+	return err
+}
+
+// Handles system statuses.
+func SetSystem(trigger int, conf Settings) error {
+	var params string
+	var data httpRequest
+	switch trigger {
+	case Arm:
+		params = "comm=80&data0=2&data2=17&data1=1"
+	case Stay:
+		params = "comm=80&data0=2&data2=18&data1=1"
+	case Disarm:
+		params = "comm=80&data0=2&data2=16&data1=1"
+	case Chime:
+		params = "comm=80&data0=2&data2=1&data1=1"
+	default:
+		params = "comm=80&data0=2&data2=1&data1=1" // Chime
+	}
+	data.Path = conf.Url + "user/keyfunction.cgi"
+	data.Params = addSession(params, getSession())
+	data.Method = "POST"
+	_, err := makeRequest(data, conf, 2)
+
+	return err
+}
+
 // returns Environment (string) variable or default value
 func getEnv(key string, defaultVal string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -277,11 +312,6 @@ func addSession(params string, session string) string {
 	}
 	return params
 }
-func doRequest(data httpRequest, conf *Settings, tries int) ([]byte, error) {
-	var err error
-	var b []byte
-	return b, err
-}
 
 // HTTP request wrapper. Responsible for all requests. Accept httpRequest struct
 // and Settings. Also handles re-try, in case of expired session it may re-login
@@ -390,39 +420,4 @@ func zstate(conf Settings, state int) (zstateReq, error) {
 		}
 	}
 	return result, err
-}
-
-// Sets a zone to "Bypass state
-func SetByPass(zone int, conf *Settings) error {
-	var data httpRequest
-	params := "comm=82&data0=" + strconv.Itoa(zone)
-	data.Path = conf.Url + "user/zonefunction.cgi"
-	data.Params = addSession(params, getSession())
-	data.Method = "POST"
-	_, err := doRequest(data, conf, 2)
-	return err
-}
-
-// Handles system statuses.
-func SetSystem(trigger int, conf *Settings) error {
-	var params string
-	var data httpRequest
-	switch trigger {
-	case Arm:
-		params = "comm=80&data0=2&data2=17&data1=1"
-	case Stay:
-		params = "comm=80&data0=2&data2=18&data1=1"
-	case Disarm:
-		params = "comm=80&data0=2&data2=16&data1=1"
-	case Chime:
-		params = "comm=80&data0=2&data2=1&data1=1"
-	default:
-		params = "comm=80&data0=2&data2=1&data1=1" // Chime
-	}
-	data.Path = conf.Url + "user/keyfunction.cgi"
-	data.Params = addSession(params, getSession())
-	data.Method = "POST"
-	_, err := doRequest(data, conf, 2)
-
-	return err
 }
