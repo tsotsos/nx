@@ -136,6 +136,28 @@ func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
 	return nx, err
 }
 
+// ZonesStatus fetches zone names and their statuses
+func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
+	// retrieves stored zone names
+	names, err := zonesNames(nx.Settings)
+	if err != nil {
+		return nx, err
+	}
+	// retrieves and caclulate various zone
+	// statuses
+	rawSequence, err := sequence(nx.Settings)
+	zones := strings.Split(rawSequence.Zones, ",")
+	zonesData := make([][4]int, len(zones))
+	for i, _ := range zones {
+		zstate, _ := zstate(nx.Settings, i)
+		zonesData[zstate.Zstate] = zstate.Zdat
+	}
+	nx.Zones.Status = calculateStatuses(zonesData)
+	nx.Zones.Names = names
+	return nx, err
+
+}
+
 // returns Environment (string) variable or default value
 func getEnv(key string, defaultVal string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -172,19 +194,6 @@ func getSession() string {
 	session := string(content)
 	sessionId = session
 	return session
-}
-
-// ZoneStatuses fetch status for each zone in the system
-func ZonesStatuses(conf *Settings) ([]zoneStatus, error) {
-	rawSequence, err := Sequence(conf)
-	zones := strings.Split(rawSequence.Zones, ",")
-	zonesData := make([][4]int, len(zones))
-	for i, _ := range zones {
-		zstate, _ := Zstate(conf, i)
-		zonesData[zstate.Zstate] = zstate.Zdat
-	}
-	zonesStatus := calculateStatuses(zonesData)
-	return zonesStatus, err
 }
 
 // Creates an array of statuses for zones
@@ -228,13 +237,13 @@ func calculateStatus(i int, zones [][4]int) zoneStatus {
 
 // Retrieves zone names via parsing embeded javascript variable from
 // zones.htm file. Unfortunately no other way found
-func ZonesNames(conf *Settings) ([]string, error) {
+func zonesNames(conf Settings) ([]string, error) {
 	var data httpRequest
 	var names []string
 	data.Path = conf.Url + "user/zones.htm"
 	data.Params = ""
 	data.Method = "GET"
-	response, err := doRequest(data, conf, 2)
+	response, err := makeRequest(data, conf, 2)
 	if err != nil {
 		return names, err
 	}
@@ -359,13 +368,13 @@ func login(conf Settings) (string, error) {
 // Returns Sequence. Via this request we can retrieve seq.xml response but still
 // in order to retrieve Statuses you should use ZoneStatuses function, since
 // sequence cannot be used without Zstate.
-func Sequence(conf *Settings) (sequenceReq, error) {
+func sequence(conf Settings) (sequenceReq, error) {
 	var data httpRequest
 	var result sequenceReq
 	data.Path = conf.Url + "user/seq.xml"
 	data.Params = addSession("", getSession())
 	data.Method = "POST"
-	response, err := doRequest(data, conf, 2)
+	response, err := makeRequest(data, conf, 2)
 	if err != nil {
 		return result, err
 	}
@@ -376,13 +385,13 @@ func Sequence(conf *Settings) (sequenceReq, error) {
 // Returns Zstate result. Zstate cannot be used without Sequence, only by
 // joining Zstate and Sequese requests we can calculate zone statues
 // for this use ZoneStatuses()
-func Zstate(conf *Settings, state int) (zstateReq, error) {
+func zstate(conf Settings, state int) (zstateReq, error) {
 	var data httpRequest
 	var result zstateReq
 	data.Path = conf.Url + "user/zstate.xml"
 	data.Method = "POST"
 	data.Params = addSession("state="+strconv.Itoa(state), getSession())
-	response, err := doRequest(data, conf, 2)
+	response, err := makeRequest(data, conf, 2)
 	xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
 		stAr := strings.Split(result.ZdatS, ",")
