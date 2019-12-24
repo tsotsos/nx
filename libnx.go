@@ -14,13 +14,14 @@ import (
 	"strings"
 )
 
+// Settings structure holds all important configuration.
 type Settings struct {
 	Protocol string
 	Host     string
 	Name     string
 	User     string
 	Pin      string
-	Url      string
+	URL      string
 }
 
 // All system triggers
@@ -31,6 +32,7 @@ const (
 	Chime
 )
 
+// NxAlarm is the main Structure holds all data for libnx
 type NxAlarm struct {
 	System   systemStatus
 	Zones    zones
@@ -89,7 +91,7 @@ type zstateReq struct {
 }
 
 // session id global
-var sessionId string
+var sessionID string
 
 // NxAlarm constructor
 func NewNxAlarm() *NxAlarm {
@@ -102,7 +104,7 @@ func NewNxAlarm() *NxAlarm {
 			Name:     getEnv("NX_NANE", ""),
 			User:     getEnv("NX_USER", ""),
 			Pin:      getEnv("NX_PIN", ""),
-			Url: getEnv("NX_PROTOCOL", "") + "://" +
+			URL: getEnv("NX_PROTOCOL", "") + "://" +
 				getEnv("NX_HOST", "") + "/",
 		},
 	}
@@ -128,7 +130,7 @@ func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
 func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
 	var data httpRequest
 	var result systemStatus
-	data.Path = nx.Settings.Url + "user/status.xml"
+	data.Path = nx.Settings.URL + "user/status.xml"
 	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := makeRequest(data, nx.Settings, 2)
@@ -165,7 +167,7 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 func (nx *NxAlarm) SetByPass(zone int) error {
 	var data httpRequest
 	params := "comm=82&data0=" + strconv.Itoa(zone)
-	data.Path = nx.Settings.Url + "user/zonefunction.cgi"
+	data.Path = nx.Settings.URL + "user/zonefunction.cgi"
 	data.Params = addSession(params, getSession())
 	data.Method = "POST"
 	_, err := makeRequest(data, nx.Settings, 2)
@@ -196,7 +198,7 @@ func (nx *NxAlarm) SetSystem(trigger int) error {
 		err := errors.New("Provided wrong trigger")
 		return err
 	}
-	data.Path = nx.Settings.Url + "user/keyfunction.cgi"
+	data.Path = nx.Settings.URL + "user/keyfunction.cgi"
 	data.Params = addSession(params, getSession())
 	data.Method = "POST"
 	_, err := makeRequest(data, nx.Settings, 2)
@@ -206,7 +208,7 @@ func (nx *NxAlarm) SetSystem(trigger int) error {
 
 // Sets session to global and file
 func setSession(session string) {
-	sessionId = session
+	sessionID = session
 	file, err := os.Create("session")
 	if err != nil {
 		panic(err)
@@ -218,8 +220,8 @@ func setSession(session string) {
 
 // Retrieves the session from global or file
 func getSession() string {
-	if sessionId != "" {
-		return sessionId
+	if sessionID != "" {
+		return sessionID
 	}
 	content, err := ioutil.ReadFile("session")
 	if err != nil {
@@ -229,7 +231,7 @@ func getSession() string {
 		panic(err)
 	}
 	session := string(content)
-	sessionId = session
+	sessionID = session
 	return session
 }
 
@@ -286,7 +288,7 @@ func calculateStatus(i int, zones [][4]int) zoneStatus {
 func zonesNames(conf Settings) ([]string, error) {
 	var data httpRequest
 	var names []string
-	data.Path = conf.Url + "user/zones.htm"
+	data.Path = conf.URL + "user/zones.htm"
 	data.Params = ""
 	data.Method = "GET"
 	response, err := makeRequest(data, conf, 2)
@@ -388,7 +390,7 @@ func login(conf Settings) (string, error) {
 	re := regexp.MustCompile(
 		`(?msUi)function getSession\(\){return\s"(\S.*)";}`)
 
-	data.Path = conf.Url + "login.cgi"
+	data.Path = conf.URL + "login.cgi"
 	data.Params = "lgname=" + conf.User + "&" + "lgpin=" + conf.Pin
 	data.Method = "POST"
 	response, err := makeRequest(data, conf, 1)
@@ -412,7 +414,7 @@ func login(conf Settings) (string, error) {
 func sequence(conf Settings) (sequenceReq, error) {
 	var data httpRequest
 	var result sequenceReq
-	data.Path = conf.Url + "user/seq.xml"
+	data.Path = conf.URL + "user/seq.xml"
 	data.Params = addSession("", getSession())
 	data.Method = "POST"
 	response, err := makeRequest(data, conf, 2)
@@ -429,7 +431,7 @@ func sequence(conf Settings) (sequenceReq, error) {
 func zstate(conf Settings, state int) (zstateReq, error) {
 	var data httpRequest
 	var result zstateReq
-	data.Path = conf.Url + "user/zstate.xml"
+	data.Path = conf.URL + "user/zstate.xml"
 	data.Method = "POST"
 	data.Params = addSession("state="+strconv.Itoa(state), getSession())
 	response, err := makeRequest(data, conf, 2)
