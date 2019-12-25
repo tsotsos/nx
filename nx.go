@@ -137,7 +137,7 @@ func (nx *Alarm) SystemStatus() (*Alarm, error) {
 	if err != nil {
 		return nx, err
 	}
-	xml.Unmarshal(response, &result)
+	err = xml.Unmarshal(response, &result)
 	nx.System = result
 	return nx, err
 }
@@ -212,10 +212,16 @@ func setSession(session string) {
 	file, err := os.Create("session")
 	if err != nil {
 		panic(err)
-		return
 	}
-	defer file.Close()
-	file.WriteString(session)
+	defer func() {
+		if err := file.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	_, err = file.WriteString(session)
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Retrieves the session from global or file
@@ -377,7 +383,11 @@ func makeRequest(data httpRequest, conf Settings, tries int) ([]byte, error) {
 	if response.StatusCode != http.StatusOK {
 		return result, errors.New("Could not connect to card")
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			panic(err)
+		}
+	}()
 	return bodyBytes, err
 }
 
@@ -421,7 +431,7 @@ func sequence(conf Settings) (sequenceReq, error) {
 	if err != nil {
 		return result, err
 	}
-	xml.Unmarshal(response, &result)
+	err = xml.Unmarshal(response, &result)
 	return result, err
 }
 
@@ -435,7 +445,7 @@ func zstate(conf Settings, state int) (zstateReq, error) {
 	data.Method = "POST"
 	data.Params = addSession("state="+strconv.Itoa(state), getSession())
 	response, err := makeRequest(data, conf, 2)
-	xml.Unmarshal(response, &result)
+	err = xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
 		stAr := strings.Split(result.ZdatS, ",")
 		for i, v := range stAr {
