@@ -1,4 +1,4 @@
-// Nx is small library for NX595 and similar family Network Cards.
+// Package nx is small library for NX595 and similar family Network Cards.
 // It works based on the current web interface.
 // Library covers all Alarm's functions, such as:
 //  - System Status
