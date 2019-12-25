@@ -1,4 +1,4 @@
-[![rcard](https://goreportcard.com/badge/github.com/tsotsos/Nx)](https://goreportcard.com/badge/github.com/tsotsos/Nx)
+[![rcard](https://goreportcard.com/badge/github.com/tsotsos/Nx)](https://goreportcard.com/report/github.com/tsotsos/Nx)
 
 # Nx card go library
 
