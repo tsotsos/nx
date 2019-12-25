@@ -442,6 +442,9 @@ func zstate(conf Settings, state int) (zstateReq, error) {
 	data.Method = "POST"
 	data.Params = addSession("state="+strconv.Itoa(state), getSession())
 	response, err := makeRequest(data, conf, 2)
+	if err != nil {
+		return result, err
+	}
 	err = xml.Unmarshal(response, &result)
 	if result.ZdatS != "" {
 		stAr := strings.Split(result.ZdatS, ",")
