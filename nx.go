@@ -325,17 +325,14 @@ func zonesNames(conf Settings) ([]string, error) {
 // occasions NX redirects to login page (even on XHRs), this function dectects
 // login form and returns its status
 func loginFormExist(response []byte) bool {
-	loginForm := ""
+	loginForm := false
 	var re = regexp.MustCompile(`(?m)form method="post" action="/login.cgi"`)
 	for _, match := range re.FindAllStringSubmatch(string(response), -1) {
 		if match[0] != "" {
-			loginForm = match[0]
+			loginForm = true
 		}
 	}
-	if loginForm != "" {
-		return true
-	}
-	return false
+	return loginForm
 }
 
 func addSession(params string, session string) string {
@@ -370,9 +367,9 @@ func makeRequest(data httpRequest, conf Settings, tries int) ([]byte, error) {
 	// In case of session expire and given enought tries we handle re-login
 	if response.StatusCode == http.StatusForbidden ||
 		(response.StatusCode == http.StatusOK &&
-			loginFormExist(bodyBytes) == true) {
+			loginFormExist(bodyBytes)) {
 		if tries > 1 {
-			if data.Path == "login.cgi" == false {
+			if data.Path != "login.cgi" {
 				newSession, _ := login(conf)
 				data.Params = addSession(data.Params, newSession)
 			}
