@@ -16,5 +16,3 @@ Also this library provide the option to import your custom named zones.
 
 # Install  and Usage
 > go get -u [https://github.com/tsotsos/Nx](https://github.com/tsotsos/Nx)
-
-> go install
