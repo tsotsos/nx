@@ -1,4 +1,4 @@
-[![GoDoc](https://godoc.org/github.com/tsotsos/Nx?status.svg)](https://godoc.org/github.com/tsotsos/Nx) [![rcard](https://goreportcard.com/badge/github.com/tsotsos/Nx)](https://goreportcard.com/report/github.com/tsotsos/Nx)
+[![GoDoc](https://godoc.org/github.com/tsotsos/Nx?status.svg)](https://godoc.org/github.com/tsotsos/Nx) [![rcard](https://goreportcard.com/badge/github.com/tsotsos/Nx)](https://goreportcard.com/report/github.com/tsotsos/Nx) [![License](https://img.shields.io/github/license/tsotsos/nx)](https://img.shields.io/github/license/tsotsos/nx)
 
 # Nx card go library
 
