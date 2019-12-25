@@ -32,8 +32,8 @@ const (
 	Chime
 )
 
-// NxAlarm is the main Structure holds all data for libnx
-type NxAlarm struct {
+// Alarm is the main Structure holds all data for libnx
+type Alarm struct {
 	System   systemStatus
 	Zones    zones
 	Settings Settings
@@ -93,9 +93,9 @@ type zstateReq struct {
 // SessionID declaration. It holds the assigned session id from NX.
 var sessionID string
 
-// NewNxAlarm is a constructor for NxAlarm
-func NewNxAlarm() *NxAlarm {
-	return &NxAlarm{
+// NewAlarm is a constructor for Alarm
+func NewAlarm() *Alarm {
+	return &Alarm{
 		System: systemStatus{},
 		Zones:  zones{},
 		Settings: Settings{
@@ -110,24 +110,24 @@ func NewNxAlarm() *NxAlarm {
 	}
 }
 
-// AddSettings adds new Settings to NxAlarm
-func (nx *NxAlarm) AddSettings(conf Settings) *NxAlarm {
+// AddSettings adds new Settings to Alarm
+func (nx *Alarm) AddSettings(conf Settings) *Alarm {
 	nx.Settings = conf
 	return nx
 }
 
-// AddZoneNames adds new Zone Names to NxAlarm. This way we can overide the
+// AddZoneNames adds new Zone Names to Alarm. This way we can overide the
 // default zone names coming from NX.
 // This method can be quite useful since the NX may have issues
 // when saving zone names to Alarm, in some setups it doesn't even
 // share these names with keypads.
-func (nx *NxAlarm) AddZoneNames(names []string) *NxAlarm {
+func (nx *Alarm) AddZoneNames(names []string) *Alarm {
 	nx.Zones.Names = names
 	return nx
 }
 
 // SystemStatus fetches System Statusfrom HTTP server
-func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
+func (nx *Alarm) SystemStatus() (*Alarm, error) {
 	var data httpRequest
 	var result systemStatus
 	data.Path = nx.Settings.URL + "user/status.xml"
@@ -143,7 +143,7 @@ func (nx *NxAlarm) SystemStatus() (*NxAlarm, error) {
 }
 
 // ZonesStatus fetches zone names and their statuses
-func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
+func (nx *Alarm) ZonesStatus() (*Alarm, error) {
 	// retrieves stored zone names
 	names, err := zonesNames(nx.Settings)
 	if err != nil {
@@ -164,7 +164,7 @@ func (nx *NxAlarm) ZonesStatus() (*NxAlarm, error) {
 }
 
 // SetByPass sets a zone to "Bypass state
-func (nx *NxAlarm) SetByPass(zone int) error {
+func (nx *Alarm) SetByPass(zone int) error {
 	var data httpRequest
 	params := "comm=82&data0=" + strconv.Itoa(zone)
 	data.Path = nx.Settings.URL + "user/zonefunction.cgi"
@@ -182,7 +182,7 @@ func (nx *NxAlarm) SetByPass(zone int) error {
 // - Chime
 // Triggers are enums, in case of no declared trigger
 // the system will return error
-func (nx *NxAlarm) SetSystem(trigger int) error {
+func (nx *Alarm) SetSystem(trigger int) error {
 	var params string
 	var data httpRequest
 	switch trigger {
