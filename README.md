@@ -15,4 +15,4 @@ This is a small library for NX595 and similar family Network Cards. Since the NX
 Also this library provide the option to import your custom named zones. 
 
 # Install  and Usage
-> go get -u [https://github.com/tsotsos/Nx](https://github.com/tsotsos/Nx)
+> go get -u [github.com/tsotsos/Nx](https://github.com/tsotsos/Nx)
