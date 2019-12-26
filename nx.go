@@ -101,20 +101,12 @@ type zstateReq struct {
 // SessionID declaration. It holds the assigned session id from NX.
 var sessionID string
 
-// NewAlarm is a constructor for Alarm
-func NewAlarm() *Alarm {
+// NewAlarm is a constructor for Alarm. Requires settings struct
+func NewAlarm(conf Settings) *Alarm {
 	return &Alarm{
-		System: systemStatus{},
-		Zones:  zones{},
-		Settings: Settings{
-			Protocol: getEnv("NX_PROTOCOL", ""),
-			Host:     getEnv("NX_HOST", ""),
-			Name:     getEnv("NX_NANE", ""),
-			User:     getEnv("NX_USER", ""),
-			Pin:      getEnv("NX_PIN", ""),
-			URL: getEnv("NX_PROTOCOL", "") + "://" +
-				getEnv("NX_HOST", "") + "/",
-		},
+		System:   systemStatus{},
+		Zones:    zones{},
+		Settings: conf,
 	}
 }
 
@@ -247,15 +239,6 @@ func getSession() string {
 	session := string(content)
 	sessionID = session
 	return session
-}
-
-// returns Environment (string) variable or default value
-func getEnv(key string, defaultVal string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-
-	return defaultVal
 }
 
 // Creates an array of statuses for zones
