@@ -3,6 +3,7 @@ package nx
 import (
 	"fmt"
 	"github.com/joho/godotenv"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -15,7 +16,16 @@ func init() {
 
 // TestSystemStatus tests Nx System Status retrieval
 func TestSystemStatus(t *testing.T) {
-	nx := NewAlarm()
+	settings := Settings{
+		Protocol: getEnv("NX_PROTOCOL", ""),
+		Host:     getEnv("NX_HOST", ""),
+		Name:     getEnv("NX_NANE", ""),
+		User:     getEnv("NX_USER", ""),
+		Pin:      getEnv("NX_PIN", ""),
+		URL: getEnv("NX_PROTOCOL", "") + "://" +
+			getEnv("NX_HOST", "") + "/",
+	}
+	nx := NewAlarm(settings)
 	data, err := nx.SystemStatus()
 	if err != nil {
 		fmt.Println(err)
@@ -34,7 +44,16 @@ func TestSystemStatus(t *testing.T) {
 }
 
 func TestZoneSatus(t *testing.T) {
-	nx := NewAlarm()
+	settings := Settings{
+		Protocol: getEnv("NX_PROTOCOL", ""),
+		Host:     getEnv("NX_HOST", ""),
+		Name:     getEnv("NX_NANE", ""),
+		User:     getEnv("NX_USER", ""),
+		Pin:      getEnv("NX_PIN", ""),
+		URL: getEnv("NX_PROTOCOL", "") + "://" +
+			getEnv("NX_HOST", "") + "/",
+	}
+	nx := NewAlarm(settings)
 	data, err := nx.ZonesStatus()
 	if err != nil {
 		fmt.Println(err)
@@ -50,4 +69,13 @@ func TestZoneSatus(t *testing.T) {
 		fmt.Println("zone: ", zone, v, "\t\t", status)
 
 	}
+}
+
+// returns Environment (string) variable or default value
+func getEnv(key string, defaultVal string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+
+	return defaultVal
 }
